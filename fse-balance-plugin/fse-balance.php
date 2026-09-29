@@ -33,7 +33,7 @@
  * Plugin Name: FSE Balance
  * Plugin URI: https://github.com/leuros88/Balance-Plugin-Wodpress-for-FSEconomy
  * Description: Displays any FSEconomy account or group bank balance with the [fse_balance] shortcode. It fetches Bank_balance from the FSEconomy API every 30 minutes via WP-Cron and serves the cached value. By Leuros88.
- * Version: 1.0.4
+ * Version: 1.0.5
  * Author: Leuros88
  * Author URI: https://github.com/leuros88
  * License: MIT
@@ -68,7 +68,7 @@ define('FSE_BALANCE_CRON_HOOK', 'fse_balance_cron_event');
 define('FSE_BALANCE_INTERVAL', 'every_thirty_minutes');
 define('FSE_BALANCE_LOCK', 'fse_balance_fetch_lock');
 define('FSE_BALANCE_MAX_BODY_SIZE', 500000); // 500 KB max XML response
-define('FSE_BALANCE_VERSION', '1.0.4');
+define('FSE_BALANCE_VERSION', '1.0.5');
 define('FSE_BALANCE_GITHUB_REPO', 'leuros88/Balance-Plugin-Wodpress-for-FSEconomy');
 define('FSE_BALANCE_GITHUB_CACHE_KEY', 'fse_balance_github_release');
 
@@ -596,6 +596,8 @@ function fse_balance_check_github_update($transient) {
 
     $slug = dirname($basename);
 
+    $logo = plugins_url('assets/logo.jpg', __FILE__);
+
     $transient->response[$basename] = (object) [
         'slug'        => $slug,
         'plugin'      => $basename,
@@ -603,6 +605,10 @@ function fse_balance_check_github_update($transient) {
         'url'         => $release['url'],
         'package'     => $release['package'],
         'tested'      => get_bloginfo('version'),
+        'icons'       => [
+            '2x' => $logo,
+            '1x' => $logo,
+        ],
     ];
 
     return $transient;
@@ -641,6 +647,10 @@ function fse_balance_github_plugin_info($result, $action, $args) {
         'tested'        => get_bloginfo('version'),
         'requires_php'  => '7.4',
         'download_link' => $release['package'],
+        'icons'         => [
+            '2x' => plugins_url('assets/logo.jpg', __FILE__),
+            '1x' => plugins_url('assets/logo.jpg', __FILE__),
+        ],
         'sections'      => [
             'description' => 'Displays the FSEconomy bank balance using the [fse_balance] shortcode.',
             'changelog'   => !empty($release['notes']) ? nl2br(esc_html($release['notes'])) : 'See releases on GitHub.',
@@ -649,10 +659,16 @@ function fse_balance_github_plugin_info($result, $action, $args) {
 }
 
 /**
- * Fix the extracted folder name after a GitHub update.
+ * Fix the extracted folder after a GitHub update.
  *
- * GitHub zipballs extract to "{repo}-{tag}" instead of our plugin slug,
- * which would duplicate the plugin. Rename it back.
+ * Two cases are handled:
+ * 1. The package installed under a different folder name (e.g. a GitHub
+ *    zipball "{repo}-{tag}"). It is moved to our plugin slug folder.
+ * 2. A repo-root zipball was installed into place, leaving the real plugin
+ *    nested one level deeper ("slug/slug/fse-balance.php"). The nested
+ *    folder is promoted so "slug/fse-balance.php" exists again. Without
+ *    this, WordPress reports "Plugin file does not exist" and deactivates
+ *    the plugin.
  *
  * @param mixed $response   Installation response.
  * @param array $hook_extra Extra args (contains plugin file when updating).
@@ -674,12 +690,37 @@ function fse_balance_fix_github_folder($response, $hook_extra, $result) {
         WP_Filesystem();
     }
 
-    $proper_dir = WP_PLUGIN_DIR . '/' . dirname(plugin_basename(__FILE__));
-    if ($result['destination'] !== $proper_dir && $wp_filesystem->is_dir($result['destination'])) {
+    $slug       = dirname(plugin_basename(__FILE__));
+    $proper_dir = WP_PLUGIN_DIR . '/' . $slug;
+    $main_file  = $proper_dir . '/fse-balance.php';
+
+    // Case 1: package landed in a wrongly-named folder. Move it into place.
+    if (!empty($result['destination']) && $result['destination'] !== $proper_dir && $wp_filesystem->is_dir($result['destination'])) {
         // Remove any stale copy, then move into place.
         $wp_filesystem->delete($proper_dir, true);
         $wp_filesystem->move($result['destination'], $proper_dir);
-        $result['destination'] = $proper_dir;
+    }
+
+    // Case 2: repo root installed into place, real plugin nested one level
+    // deeper. Promote the nested folder so the main file exists again.
+    if (!$wp_filesystem->exists($main_file)) {
+        $entries = $wp_filesystem->dirlist($proper_dir);
+        if (is_array($entries)) {
+            foreach ($entries as $name => $details) {
+                if ($name === '.' || $name === '..' || empty($details['type']) || $details['type'] !== 'd') {
+                    continue;
+                }
+                $candidate = trailingslashit($proper_dir) . $name;
+                if ($wp_filesystem->exists($candidate . '/fse-balance.php')) {
+                    $staging = WP_PLUGIN_DIR . '/' . $slug . '-upgrade-staging';
+                    $wp_filesystem->delete($staging, true);
+                    $wp_filesystem->move($candidate, $staging);
+                    $wp_filesystem->delete($proper_dir, true);
+                    $wp_filesystem->move($staging, $proper_dir);
+                    break;
+                }
+            }
+        }
     }
 
     // Force WP to re-check updates right after install.
