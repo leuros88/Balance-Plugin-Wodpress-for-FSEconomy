@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logobalance.jpeg" alt="FSE Balance Logo" width="200">
+</p>
+
 # FSE Balance — WordPress Plugin for FSEconomy
 
 WordPress plugin to display any account or group bank balance from the [FSEconomy](https://www.fseconomy.net) API using a shortcode.
