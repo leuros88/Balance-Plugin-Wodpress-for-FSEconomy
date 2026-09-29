@@ -33,7 +33,7 @@
  * Plugin Name: FSE Balance
  * Plugin URI: https://github.com/leuros88/Balance-Plugin-Wodpress-for-FSEconomy
  * Description: Displays any FSEconomy account or group bank balance with the [fse_balance] shortcode. It fetches Bank_balance from the FSEconomy API every 30 minutes via WP-Cron and serves the cached value. By Leuros88.
- * Version: 1.0.6
+ * Version: 1.0.7
  * Author: Leuros88
  * Author URI: https://github.com/leuros88
  * License: MIT
@@ -68,7 +68,7 @@ define('FSE_BALANCE_CRON_HOOK', 'fse_balance_cron_event');
 define('FSE_BALANCE_INTERVAL', 'every_thirty_minutes');
 define('FSE_BALANCE_LOCK', 'fse_balance_fetch_lock');
 define('FSE_BALANCE_MAX_BODY_SIZE', 500000); // 500 KB max XML response
-define('FSE_BALANCE_VERSION', '1.0.6');
+define('FSE_BALANCE_VERSION', '1.0.7');
 define('FSE_BALANCE_GITHUB_REPO', 'leuros88/Balance-Plugin-Wodpress-for-FSEconomy');
 define('FSE_BALANCE_GITHUB_CACHE_KEY', 'fse_balance_github_release');
 
@@ -500,8 +500,11 @@ function fse_balance_settings_page() {
 /**
  * Get the latest GitHub release (cached 12h).
  *
- * Expects tags like "1.3" or "v1.3". The zip attached to the release is
- * preferred as download package; falls back to zipball_url.
+ * Expects tags like "1.3" or "v1.3". Only releases with an attached
+ * WordPress-compatible .zip asset are used. Releases without one are
+ * ignored on purpose: installing GitHub's auto-generated zipball would
+ * place the repo root (not the plugin folder) and deactivate the plugin
+ * with "Plugin file does not exist".
  *
  * @return array|false Release data (version, package, url, notes, published_at).
  */
@@ -546,8 +549,9 @@ function fse_balance_get_github_release() {
         return false;
     }
 
-    // Prefer an attached .zip asset, otherwise use the auto-generated zipball.
-    $package = isset($data['zipball_url']) ? $data['zipball_url'] : '';
+    // Only an attached .zip asset is a safe package: it contains the
+    // plugin slug folder at top level. Never fall back to zipball_url.
+    $package = '';
     if (!empty($data['assets']) && is_array($data['assets'])) {
         foreach ($data['assets'] as $asset) {
             if (!empty($asset['browser_download_url']) && substr($asset['browser_download_url'], -4) === '.zip') {
