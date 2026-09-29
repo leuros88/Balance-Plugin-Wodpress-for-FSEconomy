@@ -4,6 +4,7 @@
  *
  * Displays the FSEconomy bank balance using shortcodes.
  * Created and maintained by Leuros88.
+ * Repository: https://github.com/leuros88/Balance-Plugin-Wodpress-for-FSEconomy
  *
  * MIT License
  *
