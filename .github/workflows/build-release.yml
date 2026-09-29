@@ -1,6 +1,8 @@
 name: Build release zip
 
 on:
+  release:
+    types: [published]
   push:
     tags:
       - 'v*'
@@ -14,10 +16,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build plugin zip
+      - name: Validate version (tag == plugin header == constant)
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          HEADER=$(grep -m1 '^[[:space:]]*\* Version:' fse-balance-plugin/fse-balance.php | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?')
+          CONST=$(grep -m1 "FSE_BALANCE_VERSION" fse-balance-plugin/fse-balance.php | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?')
+          echo "Tag: $TAG | Header: $HEADER | Constant: $CONST"
+          if [ -z "$TAG" ] || [ -z "$HEADER" ] || [ -z "$CONST" ]; then
+            echo "::error::Could not parse version (tag/header/constant)."
+            exit 1
+          fi
+          if [ "$TAG" != "$HEADER" ] || [ "$TAG" != "$CONST" ]; then
+            echo "::error::Version mismatch: tag v$TAG vs header $HEADER vs constant $CONST. Update Version: and FSE_BALANCE_VERSION in fse-balance-plugin/fse-balance.php."
+            exit 1
+          fi
+          echo "Version OK: $TAG"
+
+      - name: Build plugin zip (WordPress-compatible)
         run: |
           rm -f fse-balance-plugin.zip
-          zip -r fse-balance-plugin.zip fse-balance-plugin
+          zip -r fse-balance-plugin.zip fse-balance-plugin -x "*.DS_Store" "__MACOSX/*"
+          echo "--- Zip contents ---"
+          unzip -l fse-balance-plugin.zip
+          # WordPress requires TOP-LEVEL folder/slug with the main file inside
+          unzip -l fse-balance-plugin.zip | grep -q "fse-balance-plugin/fse-balance.php" || {
+            echo "::error::Zip is not WordPress-compatible: fse-balance-plugin/fse-balance.php not found at top level."
+            exit 1
+          }
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
