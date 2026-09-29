@@ -41,7 +41,7 @@ Instead of querying the FSEconomy API on every page load, the plugin fetches the
    - **Option A — FTP:** extract / upload the plugin folder to `wp-content/plugins/`.
    - **Option B — WP Admin:** go to `Plugins > Add New > Upload Plugin`, upload the `.zip` directly.
 3. Go to `Plugins` and click **Activate** on **FSE Balance**.
-4. Go to `FSE Balance` in the admin menu and paste your FSEconomy API URL, then click **Save URL**.
+4. Go to `FSE Balance` in the admin menu and paste your FSEconomy API URL, **including your API key**, into the **API URL** field, then click **Save URL**.
 
 ## Usage
 
@@ -51,7 +51,7 @@ Add the shortcode anywhere (post, page, widget):
 [fse_balance]
 ```
 
-To force an immediate sync, use the **Force update now** button on the settings page.
+To force an immediate sync, use the **Force balance refresh now** button on the settings page. You can force a balance refresh at any time — it queries the API on demand and updates the cached value, last update date, and status.
 
 ## Updates
 

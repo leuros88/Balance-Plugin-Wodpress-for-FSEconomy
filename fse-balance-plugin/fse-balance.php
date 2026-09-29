@@ -31,9 +31,11 @@
  * @package FSE_Balance
  *
  * Plugin Name: FSE Balance
- * Description: Displays the FSEconomy bank balance using the [fse_balance] shortcode. Fetches Bank_balance from the FSEconomy API every 30 minutes and caches it.
+ * Plugin URI: https://github.com/leuros88/Balance-Plugin-Wodpress-for-FSEconomy
+ * Description: Displays any FSEconomy account or group bank balance with the [fse_balance] shortcode. It fetches Bank_balance from the FSEconomy API every 30 minutes via WP-Cron and serves the cached value. By Leuros88.
  * Version: 1.2
  * Author: Leuros88
+ * Author URI: https://github.com/leuros88
  * License: MIT
  * License URI: https://opensource.org/licenses/MIT
  * Requires at least: 6.0
@@ -191,14 +193,14 @@ function fse_balance_fetch_data($force = false) {
 
     // No URL configured yet — nothing to fetch.
     if (empty($api_url)) {
-        update_option('fse_balance_last_error', 'Sin URL configurada.');
+        update_option('fse_balance_last_error', 'No API URL configured.');
         delete_transient(FSE_BALANCE_LOCK);
         return false;
     }
 
     // Reject non-FSEconomy URLs.
     if (!fse_balance_is_allowed_url($api_url)) {
-        update_option('fse_balance_last_error', 'URL no permitida. Solo se permite fseconomy.net.');
+        update_option('fse_balance_last_error', 'URL not allowed. Only fseconomy.net is permitted.');
         delete_transient(FSE_BALANCE_LOCK);
         return false;
     }
@@ -214,7 +216,7 @@ function fse_balance_fetch_data($force = false) {
     ]);
 
     if (is_wp_error($response)) {
-        update_option('fse_balance_last_error', 'Error HTTP: ' . $response->get_error_message());
+        update_option('fse_balance_last_error', 'HTTP error: ' . $response->get_error_message());
         delete_transient(FSE_BALANCE_LOCK);
         return false;
     }
@@ -228,7 +230,7 @@ function fse_balance_fetch_data($force = false) {
     $body = wp_remote_retrieve_body($response);
 
     if (empty($body) || strlen($body) > FSE_BALANCE_MAX_BODY_SIZE) {
-        update_option('fse_balance_last_error', 'Respuesta vacía o demasiado grande.');
+        update_option('fse_balance_last_error', 'Empty or oversized response.');
         delete_transient(FSE_BALANCE_LOCK);
         return false;
     }
@@ -240,13 +242,13 @@ function fse_balance_fetch_data($force = false) {
     libxml_use_internal_errors($prev);
 
     if (!$xml) {
-        update_option('fse_balance_last_error', 'XML inválido.');
+        update_option('fse_balance_last_error', 'Invalid XML.');
         delete_transient(FSE_BALANCE_LOCK);
         return false;
     }
 
     if (!isset($xml->Statistic->Bank_balance)) {
-        update_option('fse_balance_last_error', 'Bank_balance no encontrado en XML.');
+        update_option('fse_balance_last_error', 'Bank_balance not found in XML.');
         delete_transient(FSE_BALANCE_LOCK);
         return false;
     }
@@ -254,7 +256,7 @@ function fse_balance_fetch_data($force = false) {
     $bank = (string) $xml->Statistic->Bank_balance;
 
     if ($bank === '' || !is_numeric($bank)) {
-        update_option('fse_balance_last_error', 'Bank_balance no numérico.');
+        update_option('fse_balance_last_error', 'Non-numeric Bank_balance.');
         delete_transient(FSE_BALANCE_LOCK);
         return false;
     }
@@ -307,7 +309,7 @@ function fse_balance_register_menu() {
 function fse_balance_settings_page() {
     // Capability check.
     if (!current_user_can('manage_options')) {
-        wp_die(esc_html__('No tienes permiso para acceder a esta página.'));
+        wp_die(esc_html__('You do not have permission to access this page.'));
     }
 
     // Handle URL save (CSRF-protected).
@@ -317,10 +319,10 @@ function fse_balance_settings_page() {
         $new_url = esc_url_raw(wp_unslash($_POST['fse_api_url']));
 
         if (!empty($new_url) && !fse_balance_is_allowed_url($new_url)) {
-            echo '<div class="error"><p>URL no permitida. Solo se permite fseconomy.net (http/https, puertos 80/443).</p></div>';
+            echo '<div class="error"><p>URL not allowed. Only fseconomy.net is permitted (http/https, ports 80/443).</p></div>';
         } else {
             update_option('fse_balance_api_url', $new_url);
-            echo '<div class="updated"><p>URL actualizada.</p></div>';
+            echo '<div class="updated"><p>URL saved.</p></div>';
         }
     }
 
@@ -330,59 +332,71 @@ function fse_balance_settings_page() {
 
         $ok = fse_balance_fetch_data(true);
         if ($ok) {
-            echo '<div class="updated"><p>Actualización forzada realizada.</p></div>';
+            echo '<div class="updated"><p>Balance refreshed successfully.</p></div>';
         } else {
-            $err = get_option('fse_balance_last_error', 'Error desconocido.');
-            echo '<div class="error"><p>Falló la actualización: ' . esc_html($err) . '</p></div>';
+            $err = get_option('fse_balance_last_error', 'Unknown error.');
+            echo '<div class="error"><p>Refresh failed: ' . esc_html($err) . '</p></div>';
         }
     }
 
     // Load current state for display.
     $api_url     = get_option('fse_balance_api_url', '');
     $value       = get_option('fse_balance_value', '0');
-    $last_update = get_option('fse_balance_last_update', 'Nunca');
+    $last_update = get_option('fse_balance_last_update', 'Never');
     $last_error  = get_option('fse_balance_last_error', '');
 
     $next     = wp_next_scheduled(FSE_BALANCE_CRON_HOOK);
-    $next_run = $next ? date_i18n('Y-m-d H:i:s', $next) : 'No programada';
+    $next_run = $next ? date_i18n('Y-m-d H:i:s', $next) : 'Not scheduled';
 
     ?>
     <div class="wrap">
         <h1>FSE Balance</h1>
+        <p>Displays any FSEconomy account or group bank balance with the <code>[fse_balance]</code> shortcode. It fetches <code>Bank_balance</code> from the FSEconomy API automatically every 30 minutes and serves the cached value to visitors.</p>
+        <p class="description">
+            Version <strong><?php echo esc_html(FSE_BALANCE_VERSION); ?></strong>
+            &nbsp;|&nbsp; By <strong><a href="https://github.com/leuros88" target="_blank" rel="noopener">Leuros88</a></strong>
+            &nbsp;|&nbsp; <a href="https://github.com/leuros88/Balance-Plugin-Wodpress-for-FSEconomy" target="_blank" rel="noopener">GitHub repository</a>
+        </p>
 
         <form method="post">
             <?php wp_nonce_field('fse_balance_save_url'); ?>
-            <h2>Configuración</h2>
+            <h2>Settings</h2>
 
-            <label for="fse_api_url"><strong>URL de la API:</strong></label><br>
+            <label for="fse_api_url"><strong>API URL:</strong></label><br>
             <input type="url" id="fse_api_url" name="fse_api_url" value="<?php echo esc_attr($api_url); ?>" style="width: 100%; max-width: 600px;" placeholder="https://server.fseconomy.net/...">
-            <br><br>
+            <p class="description">Paste your FSEconomy API URL here, including your API key.</p>
+            <br>
 
-            <button class="button button-primary">Guardar URL</button>
+            <button class="button button-primary">Save URL</button>
         </form>
 
         <hr>
 
+        <h2>Balance refresh</h2>
+        <p>You can force a balance refresh at any time.</p>
         <form method="post">
             <?php wp_nonce_field('fse_balance_force_update'); ?>
-            <button name="fse_force_update" value="1" class="button button-secondary">Forzar actualización ahora</button>
+            <button name="fse_force_update" value="1" class="button button-secondary">Force balance refresh now</button>
         </form>
 
-        <h2>Estado</h2>
+        <h2>Status</h2>
 
-        <p><strong>Último valor guardado:</strong> <?php echo esc_html('$' . number_format((float) $value, 2, '.', ',')); ?></p>
-        <p><strong>Última actualización:</strong> <?php echo esc_html($last_update); ?></p>
-        <p><strong>Próxima ejecución programada (cada 30 min):</strong> <?php echo esc_html($next_run); ?></p>
+        <p><strong>Last saved value:</strong> <?php echo esc_html('$' . number_format((float) $value, 2, '.', ',')); ?></p>
+        <p><strong>Last update:</strong> <?php echo esc_html($last_update); ?></p>
+        <p><strong>Next scheduled run (every 30 min):</strong> <?php echo esc_html($next_run); ?></p>
         <?php if (!empty($last_error)) : ?>
-            <p><strong>Último error:</strong> <?php echo esc_html($last_error); ?></p>
+            <p><strong>Last error:</strong> <?php echo esc_html($last_error); ?></p>
         <?php endif; ?>
-        <p><em>Nota: WP-Cron se ejecuta con las visitas a la web. Si tienes poco tráfico, usa un cron real del sistema llamando a wp-cron.php cada 30 min.</em></p>
+        <p><em>Note: WP-Cron runs on site visits. On low-traffic sites, set up a real system cron calling wp-cron.php every 30 min.</em></p>
 
-        <h2>Actualizaciones del plugin</h2>
-        <p>Versión instalada: <strong><?php echo esc_html(FSE_BALANCE_VERSION); ?></strong></p>
+        <h2>Plugin updates</h2>
+        <p>Installed version: <strong><?php echo esc_html(FSE_BALANCE_VERSION); ?></strong></p>
         <?php $check_url = wp_nonce_url(admin_url('admin.php?page=fse-balance&fse_balance_check_update=1'), 'fse_balance_check_update'); ?>
-        <p><a class="button button-secondary" href="<?php echo esc_url($check_url); ?>">Comprobar actualizaciones ahora</a></p>
-        <p><em>Las actualizaciones se publican como Releases en GitHub. Puedes activar la auto-actualización en <a href="<?php echo esc_url(admin_url('plugins.php')); ?>">Plugins</a> con “Activar las actualizaciones automáticas”.</em></p>
+        <p><a class="button button-secondary" href="<?php echo esc_url($check_url); ?>">Check for updates now</a></p>
+        <p><em>Updates are published as Releases on GitHub. You can enable automatic updates in <a href="<?php echo esc_url(admin_url('plugins.php')); ?>">Plugins</a> with “Enable auto-updates”.</em></p>
+
+        <hr>
+        <p class="description">FSE Balance v<?php echo esc_html(FSE_BALANCE_VERSION); ?> by Leuros88 — <a href="https://github.com/leuros88/Balance-Plugin-Wodpress-for-FSEconomy" target="_blank" rel="noopener">GitHub repository</a></p>
     </div>
     <?php
 }
@@ -606,7 +620,7 @@ function fse_balance_maybe_force_update_check() {
     wp_update_plugins();
 
     add_action('admin_notices', function () {
-        echo '<div class="notice notice-success is-dismissible"><p>Comprobación de actualizaciones de FSE Balance completada. Revisa <a href="' . esc_url(admin_url('plugins.php')) . '">Plugins</a>.</p></div>';
+        echo '<div class="notice notice-success is-dismissible"><p>FSE Balance update check completed. See <a href="' . esc_url(admin_url('plugins.php')) . '">Plugins</a>.</p></div>';
     });
 }
 
