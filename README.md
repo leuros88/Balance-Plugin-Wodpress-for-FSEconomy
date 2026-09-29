@@ -17,6 +17,7 @@ Instead of querying the FSEconomy API on every page load, the plugin fetches the
 - Admin settings page to configure the API URL, force a manual refresh, and check status (last value, last update, next run, last error).
 - SSRF protection: only `http/https` URLs on `*.fseconomy.net` with standard ports (80/443) are allowed.
 - Safe XML parsing with XXE protection and response size limit.
+- Self-hosted updates from GitHub Releases (check every 12 hours, one-click and auto-updates).
 - Clean uninstall: removes options, locks, and scheduled events.
 
 ## How It Works
@@ -51,6 +52,15 @@ Add the shortcode anywhere (post, page, widget):
 ```
 
 To force an immediate sync, use the **Force update now** button on the settings page.
+
+## Updates
+
+The plugin checks this repository for new versions **every 12 hours** via the GitHub Releases API (`releases/latest`).
+
+- If a new release exists, WordPress shows it in `Dashboard > Updates` and in `Plugins` with one-click update and "View details" (changelog from the release notes).
+- To enable fully automatic installation, go to `Plugins` and click **Enable auto-updates** on **FSE Balance**.
+- You can force an immediate check from `FSE Balance > Check for updates now` (clears the 12-hour cache and refreshes WordPress update data).
+- Releases use tags like `v1.3`. The attached `.zip` must contain the `fse-balance-plugin/` folder; if there is no attached asset, the GitHub `zipball` is used as fallback.
 
 ## License
 

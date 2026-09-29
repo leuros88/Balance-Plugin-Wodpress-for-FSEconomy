@@ -39,6 +39,7 @@
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Text Domain: fse-balance
+ * Update URI: https://github.com/leuros88/Balance-Plugin-Wodpress-for-FSEconomy
  */
 
 // ============================================================================
@@ -51,7 +52,8 @@
 // 4. API fetcher (cached, run by cron)
 // 5. Shortcode [fse_balance]
 // 6. Admin settings page
-// 7. Hook registration (bootstrap)
+// 7. Auto-update from GitHub Releases
+// 8. Hook registration (bootstrap)
 // ============================================================================
 
 // ----------------------------------------------------------------------------
@@ -64,6 +66,9 @@ define('FSE_BALANCE_CRON_HOOK', 'fse_balance_cron_event');
 define('FSE_BALANCE_INTERVAL', 'every_thirty_minutes');
 define('FSE_BALANCE_LOCK', 'fse_balance_fetch_lock');
 define('FSE_BALANCE_MAX_BODY_SIZE', 500000); // 500 KB max XML response
+define('FSE_BALANCE_VERSION', '1.2');
+define('FSE_BALANCE_GITHUB_REPO', 'leuros88/Balance-Plugin-Wodpress-for-FSEconomy');
+define('FSE_BALANCE_GITHUB_CACHE_KEY', 'fse_balance_github_release');
 
 // ----------------------------------------------------------------------------
 // 1. Cron schedule — Adds a 30-minute interval to WP-Cron
@@ -118,6 +123,7 @@ function fse_balance_uninstall() {
     delete_option('fse_balance_last_update');
     delete_option('fse_balance_last_error');
     delete_transient(FSE_BALANCE_LOCK);
+    delete_site_transient(FSE_BALANCE_GITHUB_CACHE_KEY);
 }
 
 // ----------------------------------------------------------------------------
@@ -371,12 +377,241 @@ function fse_balance_settings_page() {
             <p><strong>Último error:</strong> <?php echo esc_html($last_error); ?></p>
         <?php endif; ?>
         <p><em>Nota: WP-Cron se ejecuta con las visitas a la web. Si tienes poco tráfico, usa un cron real del sistema llamando a wp-cron.php cada 30 min.</em></p>
+
+        <h2>Actualizaciones del plugin</h2>
+        <p>Versión instalada: <strong><?php echo esc_html(FSE_BALANCE_VERSION); ?></strong></p>
+        <?php $check_url = wp_nonce_url(admin_url('admin.php?page=fse-balance&fse_balance_check_update=1'), 'fse_balance_check_update'); ?>
+        <p><a class="button button-secondary" href="<?php echo esc_url($check_url); ?>">Comprobar actualizaciones ahora</a></p>
+        <p><em>Las actualizaciones se publican como Releases en GitHub. Puedes activar la auto-actualización en <a href="<?php echo esc_url(admin_url('plugins.php')); ?>">Plugins</a> con “Activar las actualizaciones automáticas”.</em></p>
     </div>
     <?php
 }
 
 // ----------------------------------------------------------------------------
-// 7. Hook registration (bootstrap)
+// 7. Auto-update from GitHub Releases
+// ----------------------------------------------------------------------------
+
+/**
+ * Get the latest GitHub release (cached 12h).
+ *
+ * Expects tags like "1.3" or "v1.3". The zip attached to the release is
+ * preferred as download package; falls back to zipball_url.
+ *
+ * @return array|false Release data (version, package, url, notes, published_at).
+ */
+function fse_balance_get_github_release() {
+    $cached = get_site_transient(FSE_BALANCE_GITHUB_CACHE_KEY);
+    if (is_array($cached) && isset($cached['version'])) {
+        return $cached;
+    }
+
+    $args = [
+        'timeout' => 10,
+        'headers' => [
+            'Accept'     => 'application/vnd.github+json',
+            'User-Agent' => 'WordPress/FSE-Balance',
+        ],
+    ];
+
+    // Optional token for private repos / higher rate limits.
+    // Define FSE_BALANCE_GITHUB_TOKEN in wp-config.php or use the filter.
+    $token = defined('FSE_BALANCE_GITHUB_TOKEN') ? FSE_BALANCE_GITHUB_TOKEN : '';
+    $token = apply_filters('fse_balance_github_token', $token);
+    if (!empty($token)) {
+        $args['headers']['Authorization'] = 'Bearer ' . $token;
+    }
+
+    $response = wp_remote_get(
+        'https://api.github.com/repos/' . FSE_BALANCE_GITHUB_REPO . '/releases/latest',
+        $args
+    );
+
+    if (is_wp_error($response) || (int) wp_remote_retrieve_response_code($response) !== 200) {
+        return false;
+    }
+
+    $data = json_decode(wp_remote_retrieve_body($response), true);
+    if (!is_array($data) || empty($data['tag_name'])) {
+        return false;
+    }
+
+    $version = ltrim(trim($data['tag_name']), 'vV');
+    if ($version === '') {
+        return false;
+    }
+
+    // Prefer an attached .zip asset, otherwise use the auto-generated zipball.
+    $package = isset($data['zipball_url']) ? $data['zipball_url'] : '';
+    if (!empty($data['assets']) && is_array($data['assets'])) {
+        foreach ($data['assets'] as $asset) {
+            if (!empty($asset['browser_download_url']) && substr($asset['browser_download_url'], -4) === '.zip') {
+                $package = $asset['browser_download_url'];
+                break;
+            }
+        }
+    }
+
+    if (empty($package)) {
+        return false;
+    }
+
+    $release = [
+        'version'      => $version,
+        'package'      => $package,
+        'url'          => isset($data['html_url']) ? $data['html_url'] : ('https://github.com/' . FSE_BALANCE_GITHUB_REPO),
+        'notes'        => isset($data['body']) ? $data['body'] : '',
+        'published_at' => isset($data['published_at']) ? $data['published_at'] : '',
+    ];
+
+    set_site_transient(FSE_BALANCE_GITHUB_CACHE_KEY, $release, 12 * HOUR_IN_SECONDS);
+
+    return $release;
+}
+
+/**
+ * Inject update info into the "Dashboard > Updates" / Plugins screen.
+ *
+ * @param object $transient Update_plugins transient.
+ * @return object
+ */
+function fse_balance_check_github_update($transient) {
+    if (!is_object($transient) || empty($transient->checked)) {
+        return $transient;
+    }
+
+    $basename = plugin_basename(__FILE__);
+    if (!isset($transient->checked[$basename])) {
+        return $transient;
+    }
+
+    $release = fse_balance_get_github_release();
+    if (!$release || version_compare($release['version'], $transient->checked[$basename], '<=')) {
+        return $transient;
+    }
+
+    $slug = dirname($basename);
+
+    $transient->response[$basename] = (object) [
+        'slug'        => $slug,
+        'plugin'      => $basename,
+        'new_version' => $release['version'],
+        'url'         => $release['url'],
+        'package'     => $release['package'],
+        'tested'      => get_bloginfo('version'),
+    ];
+
+    return $transient;
+}
+
+/**
+ * Provide the "View details" popup for the plugin.
+ *
+ * @param mixed  $result Existing result.
+ * @param string $action Action name.
+ * @param object $args   Query args (expects ->slug).
+ * @return mixed
+ */
+function fse_balance_github_plugin_info($result, $action, $args) {
+    if ($action !== 'plugin_information' || empty($args->slug)) {
+        return $result;
+    }
+
+    $basename = plugin_basename(__FILE__);
+    if ($args->slug !== dirname($basename)) {
+        return $result;
+    }
+
+    $release = fse_balance_get_github_release();
+    if (!$release) {
+        return $result;
+    }
+
+    return (object) [
+        'name'          => 'FSE Balance',
+        'slug'          => dirname($basename),
+        'version'       => $release['version'],
+        'author'        => '<a href="https://github.com/leuros88">Leuros88</a>',
+        'homepage'      => $release['url'],
+        'requires'      => '6.0',
+        'tested'        => get_bloginfo('version'),
+        'requires_php'  => '7.4',
+        'download_link' => $release['package'],
+        'sections'      => [
+            'description' => 'Displays the FSEconomy bank balance using the [fse_balance] shortcode.',
+            'changelog'   => !empty($release['notes']) ? nl2br(esc_html($release['notes'])) : 'See releases on GitHub.',
+        ],
+    ];
+}
+
+/**
+ * Fix the extracted folder name after a GitHub update.
+ *
+ * GitHub zipballs extract to "{repo}-{tag}" instead of our plugin slug,
+ * which would duplicate the plugin. Rename it back.
+ *
+ * @param mixed $response   Installation response.
+ * @param array $hook_extra Extra args (contains plugin file when updating).
+ * @param array $result     Result (contains destination path).
+ * @return mixed
+ */
+function fse_balance_fix_github_folder($response, $hook_extra, $result) {
+    if (!isset($hook_extra['plugin'])) {
+        return $response;
+    }
+
+    if ($hook_extra['plugin'] !== plugin_basename(__FILE__)) {
+        return $response;
+    }
+
+    global $wp_filesystem;
+    if (!$wp_filesystem) {
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        WP_Filesystem();
+    }
+
+    $proper_dir = WP_PLUGIN_DIR . '/' . dirname(plugin_basename(__FILE__));
+    if ($result['destination'] !== $proper_dir && $wp_filesystem->is_dir($result['destination'])) {
+        // Remove any stale copy, then move into place.
+        $wp_filesystem->delete($proper_dir, true);
+        $wp_filesystem->move($result['destination'], $proper_dir);
+        $result['destination'] = $proper_dir;
+    }
+
+    // Force WP to re-check updates right after install.
+    delete_site_transient(FSE_BALANCE_GITHUB_CACHE_KEY);
+    delete_site_transient('update_plugins');
+
+    return $response;
+}
+
+/**
+ * Manual "check for updates" handler on our settings page.
+ * Clears the cache and forces WP to refresh plugin update data.
+ */
+function fse_balance_maybe_force_update_check() {
+    if (!is_admin() || !current_user_can('update_plugins')) {
+        return;
+    }
+
+    if (!isset($_GET['fse_balance_check_update'], $_GET['_wpnonce'])) {
+        return;
+    }
+
+    if (!wp_verify_nonce(sanitize_key(wp_unslash($_GET['_wpnonce'])), 'fse_balance_check_update')) {
+        return;
+    }
+
+    delete_site_transient(FSE_BALANCE_GITHUB_CACHE_KEY);
+    delete_site_transient('update_plugins');
+    wp_update_plugins();
+
+    add_action('admin_notices', function () {
+        echo '<div class="notice notice-success is-dismissible"><p>Comprobación de actualizaciones de FSE Balance completada. Revisa <a href="' . esc_url(admin_url('plugins.php')) . '">Plugins</a>.</p></div>';
+    });
+}
+
+// ----------------------------------------------------------------------------
+// 8. Hook registration (bootstrap)
 // ----------------------------------------------------------------------------
 
 add_filter('cron_schedules', 'fse_balance_add_cron_interval');
@@ -396,3 +631,9 @@ add_shortcode('fse_balance', 'fse_balance_render_shortcode');
 
 // Admin UI.
 add_action('admin_menu', 'fse_balance_register_menu');
+
+// Self-hosted updates from GitHub Releases.
+add_filter('pre_set_site_transient_update_plugins', 'fse_balance_check_github_update');
+add_filter('plugins_api', 'fse_balance_github_plugin_info', 10, 3);
+add_filter('upgrader_post_install', 'fse_balance_fix_github_folder', 10, 3);
+add_action('admin_init', 'fse_balance_maybe_force_update_check');
