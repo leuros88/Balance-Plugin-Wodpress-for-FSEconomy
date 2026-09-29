@@ -33,7 +33,7 @@
  * Plugin Name: FSE Balance
  * Plugin URI: https://github.com/leuros88/Balance-Plugin-Wodpress-for-FSEconomy
  * Description: Displays any FSEconomy account or group bank balance with the [fse_balance] shortcode. It fetches Bank_balance from the FSEconomy API every 30 minutes via WP-Cron and serves the cached value. By Leuros88.
- * Version: 1.0.3
+ * Version: 1.0.4
  * Author: Leuros88
  * Author URI: https://github.com/leuros88
  * License: MIT
@@ -68,7 +68,7 @@ define('FSE_BALANCE_CRON_HOOK', 'fse_balance_cron_event');
 define('FSE_BALANCE_INTERVAL', 'every_thirty_minutes');
 define('FSE_BALANCE_LOCK', 'fse_balance_fetch_lock');
 define('FSE_BALANCE_MAX_BODY_SIZE', 500000); // 500 KB max XML response
-define('FSE_BALANCE_VERSION', '1.0.3');
+define('FSE_BALANCE_VERSION', '1.0.4');
 define('FSE_BALANCE_GITHUB_REPO', 'leuros88/Balance-Plugin-Wodpress-for-FSEconomy');
 define('FSE_BALANCE_GITHUB_CACHE_KEY', 'fse_balance_github_release');
 
@@ -299,7 +299,8 @@ function fse_balance_register_menu() {
         'FSE Balance',
         'manage_options',
         'fse-balance',
-        'fse_balance_settings_page'
+        'fse_balance_settings_page',
+        plugins_url('assets/logo.jpg', __FILE__)
     );
 }
 
@@ -348,55 +349,145 @@ function fse_balance_settings_page() {
     $next     = wp_next_scheduled(FSE_BALANCE_CRON_HOOK);
     $next_run = $next ? date_i18n('Y-m-d H:i:s', $next) : 'Not scheduled';
 
+    $logo_url = plugins_url('assets/logo.jpg', __FILE__);
+
     ?>
-    <div class="wrap">
-        <h1>FSE Balance</h1>
-        <p>Displays any FSEconomy account or group bank balance with the <code>[fse_balance]</code> shortcode. It fetches <code>Bank_balance</code> from the FSEconomy API automatically every 30 minutes and serves the cached value to visitors.</p>
-        <p class="description">
-            Version <strong><?php echo esc_html(FSE_BALANCE_VERSION); ?></strong>
-            &nbsp;|&nbsp; By <strong><a href="https://github.com/leuros88" target="_blank" rel="noopener">Leuros88</a></strong>
-            &nbsp;|&nbsp; <a href="https://github.com/leuros88/Balance-Plugin-Wodpress-for-FSEconomy" target="_blank" rel="noopener">GitHub repository</a>
-        </p>
+    <div class="wrap fse-wrap">
+        <style>
+            .fse-wrap { max-width: 1100px; }
+            .fse-hero {
+                display: flex; align-items: center; gap: 18px;
+                background: linear-gradient(135deg, #0f2a43 0%, #134e4a 60%, #166534 100%);
+                color: #fff; border-radius: 14px; padding: 22px 26px; margin: 12px 0 20px;
+                box-shadow: 0 4px 18px rgba(15, 42, 67, .25);
+            }
+            .fse-hero img {
+                width: 76px; height: 76px; border-radius: 16px; object-fit: cover;
+                border: 2px solid rgba(255,255,255,.35); background: #fff; flex-shrink: 0;
+            }
+            .fse-hero h1 { color: #fff; margin: 0; font-size: 24px; font-weight: 700; padding: 0; }
+            .fse-hero p { margin: 6px 0 0; opacity: .92; font-size: 13.5px; max-width: 640px; }
+            .fse-hero p code { background: rgba(255,255,255,.15); color: #fff; padding: 1px 6px; border-radius: 4px; }
+            .fse-badges { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+            .fse-badge {
+                display: inline-block; font-size: 12px; font-weight: 600;
+                background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.25);
+                padding: 3px 12px; border-radius: 999px; color: #fff;
+            }
+            .fse-badge a { color: #fff; text-decoration: none; }
+            .fse-badge a:hover { text-decoration: underline; }
+            .fse-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; align-items: start; }
+            @media (max-width: 900px) { .fse-grid { grid-template-columns: 1fr; } }
+            .fse-card {
+                background: #fff; border: 1px solid #dcdcde; border-radius: 12px;
+                padding: 20px 22px; box-shadow: 0 1px 3px rgba(0,0,0,.06);
+            }
+            .fse-card h2 { margin: 0 0 4px; font-size: 15px; font-weight: 700; padding: 0; }
+            .fse-card .fse-sub { color: #646970; margin: 0 0 14px; font-size: 13px; }
+            .fse-card label { font-weight: 600; }
+            .fse-card input[type="url"] { width: 100%; margin-top: 6px; }
+            .fse-balance-amount {
+                font-size: 38px; font-weight: 800; letter-spacing: -.5px;
+                color: #166534; margin: 6px 0 12px; line-height: 1.1;
+            }
+            .fse-row {
+                display: flex; justify-content: space-between; gap: 12px;
+                padding: 9px 0; border-top: 1px solid #f0f0f1; font-size: 13.5px;
+            }
+            .fse-row:first-of-type { border-top: none; }
+            .fse-row .fse-k { color: #646970; }
+            .fse-row .fse-v { font-weight: 600; text-align: right; word-break: break-word; }
+            .fse-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; vertical-align: baseline; }
+            .fse-dot.ok { background: #22c55e; }
+            .fse-dot.err { background: #ef4444; }
+            .fse-dot.wait { background: #f59e0b; }
+            .fse-error-box {
+                background: #fef2f2; border: 1px solid #fecaca; color: #991b1b;
+                border-radius: 8px; padding: 10px 12px; margin-top: 10px; font-size: 13px;
+            }
+            .fse-note { color: #646970; font-size: 12.5px; margin-top: 12px; }
+            .fse-footer { color: #8c8f94; font-size: 12.5px; margin-top: 16px; text-align: center; }
+            .fse-footer a { color: #8c8f94; }
+        </style>
 
-        <form method="post">
-            <?php wp_nonce_field('fse_balance_save_url'); ?>
-            <h2>Settings</h2>
+        <div class="fse-hero">
+            <img src="<?php echo esc_url($logo_url); ?>" alt="FSE Balance logo" width="76" height="76">
+            <div>
+                <h1>FSE Balance</h1>
+                <p>Displays any FSEconomy account or group bank balance with the <code>[fse_balance]</code> shortcode. Synced automatically every 30 minutes via WP-Cron.</p>
+                <div class="fse-badges">
+                    <span class="fse-badge">v<?php echo esc_html(FSE_BALANCE_VERSION); ?></span>
+                    <span class="fse-badge">By <a href="https://github.com/leuros88" target="_blank" rel="noopener">Leuros88</a></span>
+                    <span class="fse-badge"><a href="https://github.com/leuros88/Balance-Plugin-Wodpress-for-FSEconomy" target="_blank" rel="noopener">GitHub repository</a></span>
+                </div>
+            </div>
+        </div>
 
-            <label for="fse_api_url"><strong>API URL:</strong></label><br>
-            <input type="url" id="fse_api_url" name="fse_api_url" value="<?php echo esc_attr($api_url); ?>" style="width: 100%; max-width: 600px;" placeholder="https://server.fseconomy.net/...">
-            <p class="description">Paste your FSEconomy API URL here, including your API key.</p>
-            <br>
+        <div class="fse-grid">
+            <div>
+                <div class="fse-card">
+                    <h2>Settings</h2>
+                    <p class="fse-sub">Paste your FSEconomy API URL, including your API key.</p>
+                    <form method="post">
+                        <?php wp_nonce_field('fse_balance_save_url'); ?>
+                        <label for="fse_api_url">API URL</label>
+                        <input type="url" id="fse_api_url" name="fse_api_url" value="<?php echo esc_attr($api_url); ?>" class="regular-text" placeholder="https://server.fseconomy.net/...">
+                        <p style="margin-top:12px;"><button class="button button-primary">Save URL</button></p>
+                    </form>
+                </div>
 
-            <button class="button button-primary">Save URL</button>
-        </form>
+                <div class="fse-card" style="margin-top:16px;">
+                    <h2>Current balance</h2>
+                    <p class="fse-sub">Cached value served to visitors — no live API call per visit.</p>
+                    <div class="fse-balance-amount"><?php echo esc_html('$' . number_format((float) $value, 2, '.', ',')); ?></div>
+                    <form method="post">
+                        <?php wp_nonce_field('fse_balance_force_update'); ?>
+                        <button name="fse_force_update" value="1" class="button button-secondary">Force balance refresh now</button>
+                    </form>
+                </div>
+            </div>
 
-        <hr>
+            <div>
+                <div class="fse-card">
+                    <h2>Status</h2>
+                    <p class="fse-sub">Automatic sync, every 30 minutes.</p>
+                    <div class="fse-row">
+                        <span class="fse-k">Last update</span>
+                        <span class="fse-v"><?php echo esc_html($last_update); ?></span>
+                    </div>
+                    <div class="fse-row">
+                        <span class="fse-k">Next run</span>
+                        <span class="fse-v"><?php echo esc_html($next_run); ?></span>
+                    </div>
+                    <div class="fse-row">
+                        <span class="fse-k">Health</span>
+                        <span class="fse-v">
+                            <?php if (!empty($last_error)) : ?>
+                                <span class="fse-dot err"></span>Error
+                            <?php elseif ($last_update === 'Never' || $last_update === '') : ?>
+                                <span class="fse-dot wait"></span>Waiting for first sync
+                            <?php else : ?>
+                                <span class="fse-dot ok"></span>Healthy
+                            <?php endif; ?>
+                        </span>
+                    </div>
+                    <?php if (!empty($last_error)) : ?>
+                        <div class="fse-error-box"><strong>Last error:</strong> <?php echo esc_html($last_error); ?></div>
+                    <?php endif; ?>
+                    <p class="fse-note">WP-Cron runs on site visits. On low-traffic sites, set up a real system cron calling <code>wp-cron.php</code> every 30 min.</p>
+                </div>
 
-        <h2>Balance refresh</h2>
-        <p>You can force a balance refresh at any time.</p>
-        <form method="post">
-            <?php wp_nonce_field('fse_balance_force_update'); ?>
-            <button name="fse_force_update" value="1" class="button button-secondary">Force balance refresh now</button>
-        </form>
+                <div class="fse-card" style="margin-top:16px;">
+                    <h2>Plugin updates</h2>
+                    <p class="fse-sub">Installed version <strong><?php echo esc_html(FSE_BALANCE_VERSION); ?></strong>, published via GitHub Releases.</p>
+                    <?php $check_url = wp_nonce_url(admin_url('admin.php?page=fse-balance&fse_balance_check_update=1'), 'fse_balance_check_update'); ?>
+                    <p><a class="button button-secondary" href="<?php echo esc_url($check_url); ?>">Check for updates now</a></p>
+                    <p class="fse-note">Enable automatic updates in <a href="<?php echo esc_url(admin_url('plugins.php')); ?>">Plugins</a> with “Enable auto-updates”.</p>
+                </div>
+            </div>
+        </div>
 
-        <h2>Status</h2>
-
-        <p><strong>Last saved value:</strong> <?php echo esc_html('$' . number_format((float) $value, 2, '.', ',')); ?></p>
-        <p><strong>Last update:</strong> <?php echo esc_html($last_update); ?></p>
-        <p><strong>Next scheduled run (every 30 min):</strong> <?php echo esc_html($next_run); ?></p>
-        <?php if (!empty($last_error)) : ?>
-            <p><strong>Last error:</strong> <?php echo esc_html($last_error); ?></p>
-        <?php endif; ?>
-        <p><em>Note: WP-Cron runs on site visits. On low-traffic sites, set up a real system cron calling wp-cron.php every 30 min.</em></p>
-
-        <h2>Plugin updates</h2>
-        <p>Installed version: <strong><?php echo esc_html(FSE_BALANCE_VERSION); ?></strong></p>
-        <?php $check_url = wp_nonce_url(admin_url('admin.php?page=fse-balance&fse_balance_check_update=1'), 'fse_balance_check_update'); ?>
-        <p><a class="button button-secondary" href="<?php echo esc_url($check_url); ?>">Check for updates now</a></p>
-        <p><em>Updates are published as Releases on GitHub. You can enable automatic updates in <a href="<?php echo esc_url(admin_url('plugins.php')); ?>">Plugins</a> with “Enable auto-updates”.</em></p>
-
-        <hr>
-        <p class="description">FSE Balance v<?php echo esc_html(FSE_BALANCE_VERSION); ?> by Leuros88 — <a href="https://github.com/leuros88/Balance-Plugin-Wodpress-for-FSEconomy" target="_blank" rel="noopener">GitHub repository</a></p>
+        <p class="fse-footer">FSE Balance v<?php echo esc_html(FSE_BALANCE_VERSION); ?> by Leuros88 — <a href="https://github.com/leuros88/Balance-Plugin-Wodpress-for-FSEconomy" target="_blank" rel="noopener">GitHub repository</a></p>
     </div>
     <?php
 }
