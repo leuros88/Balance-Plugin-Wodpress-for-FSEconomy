@@ -36,7 +36,7 @@ Instead of querying the FSEconomy API on every page load, the plugin fetches the
 
 ## Installation
 
-1. Go to **Releases** and download the latest `.zip`.
+1. Go to [**Releases**](https://github.com/leuros88/Balance-Plugin-Wodpress-for-FSEconomy/releases) and download the latest `.zip`.
 2. Install it using one of these methods:
    - **Option A — FTP:** extract / upload the plugin folder to `wp-content/plugins/`.
    - **Option B — WP Admin:** go to `Plugins > Add New > Upload Plugin`, upload the `.zip` directly.
