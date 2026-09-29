@@ -33,7 +33,7 @@
  * Plugin Name: FSE Balance
  * Plugin URI: https://github.com/leuros88/Balance-Plugin-Wodpress-for-FSEconomy
  * Description: Displays any FSEconomy account or group bank balance with the [fse_balance] shortcode. It fetches Bank_balance from the FSEconomy API every 30 minutes via WP-Cron and serves the cached value. By Leuros88.
- * Version: 1.0.7
+ * Version: 1.0.8
  * Author: Leuros88
  * Author URI: https://github.com/leuros88
  * License: MIT
@@ -68,7 +68,7 @@ define('FSE_BALANCE_CRON_HOOK', 'fse_balance_cron_event');
 define('FSE_BALANCE_INTERVAL', 'every_thirty_minutes');
 define('FSE_BALANCE_LOCK', 'fse_balance_fetch_lock');
 define('FSE_BALANCE_MAX_BODY_SIZE', 500000); // 500 KB max XML response
-define('FSE_BALANCE_VERSION', '1.0.7');
+define('FSE_BALANCE_VERSION', '1.0.8');
 define('FSE_BALANCE_GITHUB_REPO', 'leuros88/Balance-Plugin-Wodpress-for-FSEconomy');
 define('FSE_BALANCE_GITHUB_CACHE_KEY', 'fse_balance_github_release');
 
@@ -699,11 +699,17 @@ function fse_balance_fix_github_folder($response, $hook_extra, $result) {
     $proper_dir = WP_PLUGIN_DIR . '/' . $slug;
     $main_file  = $proper_dir . '/fse-balance.php';
 
+    // WordPress passes destination WITH a trailing slash while $proper_dir
+    // has none. Normalize before comparing, otherwise every update looks
+    // "misplaced" and the fresh install gets wiped (deactivation + missing
+    // plugin file).
+    $destination = isset($result['destination']) ? untrailingslashit($result['destination']) : '';
+
     // Case 1: package landed in a wrongly-named folder. Move it into place.
-    if (!empty($result['destination']) && $result['destination'] !== $proper_dir && $wp_filesystem->is_dir($result['destination'])) {
+    if ($destination !== '' && $destination !== $proper_dir && $wp_filesystem->is_dir($destination)) {
         // Remove any stale copy, then move into place.
         $wp_filesystem->delete($proper_dir, true);
-        $wp_filesystem->move($result['destination'], $proper_dir);
+        $wp_filesystem->move($destination, $proper_dir);
     }
 
     // Case 2: repo root installed into place, real plugin nested one level
