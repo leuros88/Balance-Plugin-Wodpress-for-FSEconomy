@@ -33,7 +33,7 @@
  * Plugin Name: FSE Balance
  * Plugin URI: https://github.com/leuros88/Balance-Plugin-Wodpress-for-FSEconomy
  * Description: Displays any FSEconomy account or group bank balance with the [fse_balance] shortcode. It fetches Bank_balance from the FSEconomy API every 30 minutes via WP-Cron and serves the cached value. By Leuros88.
- * Version: 1.2
+ * Version: 1.0.2
  * Author: Leuros88
  * Author URI: https://github.com/leuros88
  * License: MIT
@@ -68,7 +68,7 @@ define('FSE_BALANCE_CRON_HOOK', 'fse_balance_cron_event');
 define('FSE_BALANCE_INTERVAL', 'every_thirty_minutes');
 define('FSE_BALANCE_LOCK', 'fse_balance_fetch_lock');
 define('FSE_BALANCE_MAX_BODY_SIZE', 500000); // 500 KB max XML response
-define('FSE_BALANCE_VERSION', '1.2');
+define('FSE_BALANCE_VERSION', '1.0.2');
 define('FSE_BALANCE_GITHUB_REPO', 'leuros88/Balance-Plugin-Wodpress-for-FSEconomy');
 define('FSE_BALANCE_GITHUB_CACHE_KEY', 'fse_balance_github_release');
 

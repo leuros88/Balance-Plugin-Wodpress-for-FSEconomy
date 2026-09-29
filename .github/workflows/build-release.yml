@@ -19,8 +19,8 @@ jobs:
       - name: Validate version (tag == plugin header == constant)
         run: |
           TAG="${GITHUB_REF_NAME#v}"
-          HEADER=$(grep -m1 '^[[:space:]]*\* Version:' fse-balance-plugin/fse-balance.php | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?')
-          CONST=$(grep -m1 "FSE_BALANCE_VERSION" fse-balance-plugin/fse-balance.php | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?')
+          HEADER=$(grep -m1 'Version:' fse-balance-plugin/fse-balance.php | grep -o '[0-9][0-9.]*' | head -n1)
+          CONST=$(grep -m1 'FSE_BALANCE_VERSION' fse-balance-plugin/fse-balance.php | grep -o '[0-9][0-9.]*' | head -n1)
           echo "Tag: $TAG | Header: $HEADER | Constant: $CONST"
           if [ -z "$TAG" ] || [ -z "$HEADER" ] || [ -z "$CONST" ]; then
             echo "::error::Could not parse version (tag/header/constant)."
